@@ -185,17 +185,6 @@ export function SettingsPanel() {
         <button className="btn" onClick={exportGame}>
           {t(lang, "exportGame")}
         </button>
-
-        <button
-          className="btn"
-          onClick={() => {
-            void fetch("/api/logout", { method: "POST" }).finally(() => {
-              window.location.href = "/login";
-            });
-          }}
-        >
-          {lang === "es" ? "Cerrar sesión" : "Log out"}
-        </button>
         <p className="note">
           {lang === "es"
             ? "La dificultad se aplica al instante. Color, longitud de partida, cubo y semilla se aplican al iniciar una nueva partida."

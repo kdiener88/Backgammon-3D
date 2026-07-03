@@ -511,3 +511,14 @@ body {
   color: var(--danger);
   font-size: 0.85rem;
 }
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}

@@ -33,11 +33,27 @@ export default function App() {
         <h1 className="app-title">
           {t(lang, "appTitle")} <small>· vs IA</small>
         </h1>
-        <span className="note" aria-hidden="true">
-          {lang === "es"
-            ? "Club nocturno de tablero"
-            : "After-hours board club"}
-        </span>
+        <div className="header-right">
+          <span className="note" aria-hidden="true">
+            {lang === "es"
+              ? "Club nocturno de tablero"
+              : "After-hours board club"}
+          </span>
+          <button
+            className="btn btn-small"
+            data-testid="logout"
+            onClick={() => {
+              // Clears the app's signed session cookie; the next visit goes
+              // through /login again. (Best effort: navigate even if the
+              // endpoint is unreachable, e.g. local dev without functions.)
+              void fetch("/api/logout", { method: "POST" }).finally(() => {
+                window.location.href = "/login";
+              });
+            }}
+          >
+            {t(lang, "logout")}
+          </button>
+        </div>
       </header>
 
       <main className="app-main">
