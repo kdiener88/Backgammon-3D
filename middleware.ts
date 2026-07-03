@@ -5,7 +5,7 @@ import {
   readCookie,
   sessionSecret,
   verifySessionToken,
-} from "./lib/auth";
+} from "./lib/auth.js";
 
 /**
  * Protección del sitio con usuario y contraseña (Vercel Routing Middleware).

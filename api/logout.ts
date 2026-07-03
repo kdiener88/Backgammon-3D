@@ -1,4 +1,4 @@
-import { SESSION_COOKIE } from "../lib/auth";
+import { SESSION_COOKIE } from "../lib/auth.js";
 
 /**
  * Cierra la sesión: borra la cookie firmada. La siguiente visita pasará por

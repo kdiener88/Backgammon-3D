@@ -3,7 +3,7 @@ import {
   createSessionToken,
   sessionSecret,
   validateCredentials,
-} from "../lib/auth";
+} from "../lib/auth.js";
 
 /**
  * Valida las credenciales del formulario de acceso y, si son correctas,
