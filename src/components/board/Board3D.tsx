@@ -14,8 +14,14 @@ const POINT_W = 0.92;
 const EDGE_Z = 3.62;
 const CHECKER_R = 0.36;
 const CHECKER_H = 0.13;
-/** Row pitch: 5 checkers must fit inside a point (half-board is ~3.6). */
-const SLOT_STEP = 0.72;
+/**
+ * Row pitch: 5 checkers must span exactly a point's length (base at the
+ * board edge, 5th checker by the apex). Slightly under one diameter, so
+ * crowded points overlap a touch — like a real board.
+ */
+const SLOT_STEP = 0.68;
+/** First checker hugs the board edge (triangle bases sit at ±3.8). */
+const SLOT_BASE = 0.22;
 
 function columnOf(index: number): number {
   return index >= 12 ? index - 12 : 11 - index;
@@ -41,7 +47,7 @@ function checkerPos3D(
   const slot = stackIdx % 5;
   // Row pitch keeps 5 checkers inside a point; extra layers nest on top,
   // shifted half a slot so they sit in the gaps like a real board.
-  const dz = 0.42 + slot * SLOT_STEP + (layer % 2) * (SLOT_STEP / 2);
+  const dz = SLOT_BASE + slot * SLOT_STEP + (layer % 2) * (SLOT_STEP / 2);
   const z = isTop(index) ? -EDGE_Z + dz : EDGE_Z - dz;
   return [pointX(index), 0.02 + CHECKER_H / 2 + layer * (CHECKER_H + 0.005), z];
 }
