@@ -66,6 +66,21 @@ export function SettingsPanel() {
         </label>
 
         <label>
+          {t(lang, "playAs")}
+          <select
+            value={s.playerColor}
+            onChange={(e) =>
+              s.set({ playerColor: e.target.value as typeof s.playerColor })
+            }
+            data-testid="player-color"
+          >
+            <option value="white">{t(lang, "whites")}</option>
+            <option value="black">{t(lang, "blacks")}</option>
+            <option value="random">{t(lang, "randomColor")}</option>
+          </select>
+        </label>
+
+        <label>
           {t(lang, "matchLength")}
           <select
             value={s.matchLength}
@@ -183,8 +198,8 @@ export function SettingsPanel() {
         </button>
         <p className="note">
           {lang === "es"
-            ? "La dificultad se aplica al instante. Longitud de partida, cubo y semilla se aplican al iniciar una nueva partida."
-            : "Difficulty applies immediately. Match length, cube and seed apply when a new match starts."}
+            ? "La dificultad se aplica al instante. Color, longitud de partida, cubo y semilla se aplican al iniciar una nueva partida."
+            : "Difficulty applies immediately. Color, match length, cube and seed apply when a new match starts."}
         </p>
       </div>
     </div>

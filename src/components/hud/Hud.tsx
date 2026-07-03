@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { pipCount } from "../../game/backgammon/pipCount";
 import { canOfferDouble } from "../../game/backgammon/rules";
-import { AI, HUMAN, currentLegalMoves, useGame } from "../../store/gameStore";
+import { currentLegalMoves, opponentOf, useGame } from "../../store/gameStore";
 import { useSettings } from "../../store/settingsStore";
 import { t } from "../../lib/i18n";
 
@@ -24,31 +24,33 @@ export function Hud() {
   const respondDouble = useGame((s) => s.respondDouble);
   const newMatch = useGame((s) => s.newMatch);
   const nextGame = useGame((s) => s.nextGame);
+  const humanSide = useGame((s) => s.humanSide);
   const lang = useSettings((s) => s.language);
   const showHints = useSettings((s) => s.showHints);
 
   const game = match.game;
+  const aiSide = opponentOf(humanSide);
   const legal = useMemo(() => {
     void game;
     return currentLegalMoves(useGame.getState());
   }, [game]);
 
   const isHumanMoving =
-    game.phase === "moving" && game.turn === HUMAN && !aiThinking;
+    game.phase === "moving" && game.turn === humanSide && !aiThinking;
   const canRoll =
     !aiThinking &&
     !match.matchWinner &&
     started &&
     (game.phase === "openingRoll" ||
-      (game.phase === "rolling" && game.turn === HUMAN));
+      (game.phase === "rolling" && game.turn === humanSide));
   const canConfirm = isHumanMoving && legal.length === 0;
   const canUndo = isHumanMoving && game.turnMoves.length > 0;
-  const pipsHuman = pipCount(game, HUMAN);
-  const pipsAi = pipCount(game, AI);
+  const pipsHuman = pipCount(game, humanSide);
+  const pipsAi = pipCount(game, aiSide);
 
   const statusText = (() => {
     if (aiThinking) return t(lang, "aiThinking");
-    if (game.phase === "doubleOffered" && game.cube.offeredBy === AI) {
+    if (game.phase === "doubleOffered" && game.cube.offeredBy === aiSide) {
       return `${t(lang, "ai")} ${t(lang, "doubleOffered")} (×${game.cube.value * 2})`;
     }
     switch (status) {
@@ -84,7 +86,7 @@ export function Hud() {
         )}
       </div>
 
-      {game.phase === "doubleOffered" && game.cube.offeredBy === AI && (
+      {game.phase === "doubleOffered" && game.cube.offeredBy === aiSide && (
         <div className="panel">
           <div className="btn-row">
             <button
@@ -166,7 +168,7 @@ export function Hud() {
               <button
                 className="btn"
                 onClick={() => void offerDoubleAction()}
-                disabled={!canOfferDouble(match, HUMAN) || aiThinking}
+                disabled={!canOfferDouble(match, humanSide) || aiThinking}
               >
                 {t(lang, "double")} (×{game.cube.value * 2})
               </button>
@@ -206,20 +208,20 @@ export function Hud() {
           <span className="head">{t(lang, "ai")}</span>
           <span className="head">{t(lang, "score")}</span>
           <span className="num" data-testid="score-human">
-            {match.score.white}
+            {match.score[humanSide]}
           </span>
-          <span className="num">{match.score.black}</span>
+          <span className="num">{match.score[aiSide]}</span>
           <span className="head">{t(lang, "pips")}</span>
           <span className="num" data-testid="pips-human">
             {pipsHuman}
           </span>
           <span className="num">{pipsAi}</span>
           <span className="head">{t(lang, "bar")}</span>
-          <span className="num">{game.bar.white}</span>
-          <span className="num">{game.bar.black}</span>
+          <span className="num">{game.bar[humanSide]}</span>
+          <span className="num">{game.bar[aiSide]}</span>
           <span className="head">{t(lang, "off")}</span>
-          <span className="num">{game.off.white}</span>
-          <span className="num">{game.off.black}</span>
+          <span className="num">{game.off[humanSide]}</span>
+          <span className="num">{game.off[aiSide]}</span>
         </div>
       </div>
 
@@ -257,7 +259,7 @@ export function Hud() {
             {history.map((turn, i) => (
               <li key={i}>
                 <span className="who">
-                  {turn.player === HUMAN ? t(lang, "you") : t(lang, "ai")}
+                  {turn.player === humanSide ? t(lang, "you") : t(lang, "ai")}
                 </span>
                 <span>{turn.notation}</span>
               </li>

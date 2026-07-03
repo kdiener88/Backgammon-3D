@@ -15,6 +15,7 @@ interface StoreSnapshot {
   historyLen: number;
   scoreWhite: number;
   scoreBlack: number;
+  humanSide: "white" | "black";
 }
 
 /** Reads a compact snapshot of the game store (dev-only window hook). */
@@ -36,6 +37,7 @@ export async function snapshot(page: Page): Promise<StoreSnapshot> {
       };
       aiThinking: boolean;
       history: unknown[];
+      humanSide: "white" | "black";
     };
     return {
       phase: g.match.game.phase,
@@ -46,6 +48,7 @@ export async function snapshot(page: Page): Promise<StoreSnapshot> {
       historyLen: g.history.length,
       scoreWhite: g.match.score.white,
       scoreBlack: g.match.score.black,
+      humanSide: g.humanSide,
     };
   });
 }
@@ -69,8 +72,13 @@ export async function clickLoc(
   } else if (loc === "off") {
     await page.click('g[aria-label^="Sacar ficha"]', { force: true });
   } else {
-    // aria-label uses white's point numbering: index + 1, with a colon.
-    await page.click(`g[aria-label^="Punto ${loc + 1}:"]`, { force: true });
+    // aria-labels use the HUMAN's point numbering: index+1 for white,
+    // 24-index when the human plays black.
+    const { humanSide } = await snapshot(page);
+    const pointNumber = humanSide === "white" ? loc + 1 : 24 - loc;
+    await page.click(`g[aria-label^="Punto ${pointNumber}:"]`, {
+      force: true,
+    });
   }
   await page.waitForTimeout(120);
 }
@@ -84,13 +92,13 @@ export async function ensureHumanMoving(page: Page): Promise<void> {
   for (let guard = 0; guard < 30; guard++) {
     const s = await snapshot(page);
     if (s.phase === "gameOver") return;
-    if (!s.aiThinking && s.turn === "white" && s.phase === "moving") return;
+    if (!s.aiThinking && s.turn === s.humanSide && s.phase === "moving") return;
     if (!s.aiThinking && s.phase === "openingRoll") {
       await page.click('[data-testid="roll"]');
       await page.waitForTimeout(300);
       continue;
     }
-    if (!s.aiThinking && s.turn === "white" && s.phase === "rolling") {
+    if (!s.aiThinking && s.turn === s.humanSide && s.phase === "rolling") {
       await page.click('[data-testid="roll"]');
       await page.waitForTimeout(300);
       continue;
@@ -121,6 +129,7 @@ export async function confirmAndWaitForAi(page: Page): Promise<void> {
           __game: {
             getState: () => {
               aiThinking: boolean;
+              humanSide: string;
               match: { game: { turn: string; phase: string } };
             };
           };
@@ -129,7 +138,8 @@ export async function confirmAndWaitForAi(page: Page): Promise<void> {
       return (
         !g.aiThinking &&
         (g.match.game.phase === "gameOver" ||
-          (g.match.game.turn === "white" && g.match.game.phase === "rolling"))
+          (g.match.game.turn === g.humanSide &&
+            g.match.game.phase === "rolling"))
       );
     },
     { timeout: 30_000 },

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Move, Player } from "../../game/backgammon/types";
 import { relativePoint } from "../../game/backgammon/constants";
 import { ownCount } from "../../game/backgammon/moveGeneration";
-import { HUMAN, currentLegalMoves, useGame } from "../../store/gameStore";
+import { currentLegalMoves, opponentOf, useGame } from "../../store/gameStore";
 import { useSettings } from "../../store/settingsStore";
 import { t } from "../../lib/i18n";
 import {
@@ -37,8 +37,16 @@ export function Board2D() {
   const aiThinking = useGame((s) => s.aiThinking);
   const select = useGame((s) => s.select);
   const moveChecker = useGame((s) => s.moveChecker);
+  const humanSide = useGame((s) => s.humanSide);
   const lang = useSettings((s) => s.language);
   const svgRef = useRef<SVGSVGElement>(null);
+  // The board is laid out for white-at-bottom-right; when the human plays
+  // black the whole board rotates 180° so their home is still bottom-right.
+  // `D` maps a real board index to its display slot (involution: D(D(i))=i)
+  // and `dispP` mirrors which side of the bar/trays a player occupies.
+  const flip = humanSide === "black";
+  const D = (i: number) => (flip ? 23 - i : i);
+  const dispP = (p: Player) => (flip ? opponentOf(p) : p);
   const [drag, setDrag] = useState<{
     from: number | "bar";
     x: number;
@@ -53,7 +61,7 @@ export function Board2D() {
     return currentLegalMoves(useGame.getState());
   }, [game]);
   const humanCanAct =
-    game.phase === "moving" && game.turn === HUMAN && !aiThinking;
+    game.phase === "moving" && game.turn === humanSide && !aiThinking;
 
   const sources = useMemo(() => {
     const set = new Set<number | "bar">();
@@ -78,20 +86,28 @@ export function Board2D() {
   useEffect(() => {
     const count = game.turnMoves.length;
     if (count > prevMovesRef.current && count > 0) {
+      // Read the display flip from the store so the effect's dependencies
+      // stay minimal (the helpers in render scope change identity).
+      const flipped = useGame.getState().humanSide === "black";
+      const toDisp = (i: number) => (flipped ? 23 - i : i);
       const move: Move = game.turnMoves[count - 1];
       const player = game.turn;
+      const trayPlayer = flipped ? opponentOf(player) : player;
       const stackAtTarget =
         move.to === "off"
           ? 0
           : Math.max(ownCount(game.points, player, move.to) - 1, 0);
       const fromPos =
         move.from === "bar"
-          ? barPos(player, 0)
+          ? barPos(trayPlayer, 0)
           : checkerPos(
-              move.from,
+              toDisp(move.from),
               Math.max(ownCount(game.points, player, move.from), 0),
             );
-      const toPos = locCoords(move.to, player, stackAtTarget);
+      const toPos =
+        move.to === "off"
+          ? locCoords("off", trayPlayer, stackAtTarget)
+          : checkerPos(toDisp(move.to), stackAtTarget);
       const key = ++flightKey.current;
       setFlights((f) => [...f, { key, player, from: fromPos, to: toPos }]);
       setTimeout(() => {
@@ -156,7 +172,7 @@ export function Board2D() {
       select(null);
       return;
     }
-    if (player !== HUMAN || !sources.has(loc)) {
+    if (player !== humanSide || !sources.has(loc)) {
       select(null);
       return;
     }
@@ -176,7 +192,9 @@ export function Board2D() {
   function onPointerUp(e: React.PointerEvent) {
     if (!drag) return;
     const p = svgPoint(e);
-    const target = hitTest(p.x, p.y);
+    const hit = hitTest(p.x, p.y);
+    // hitTest works in display space; map point indices back to the board.
+    const target = typeof hit === "number" ? D(hit) : hit;
     const moved = target !== drag.from && tryMove(drag.from, target);
     if (moved) select(null);
     setDrag(null);
@@ -184,24 +202,25 @@ export function Board2D() {
 
   const triangles = [];
   for (let i = 0; i < 24; i++) {
-    const cx = pointCenterX(i);
-    const top = isTopRow(i);
+    const d = D(i);
+    const cx = pointCenterX(d);
+    const top = isTopRow(d);
     const baseY = top ? 24 : VIEW_H - 24;
     const apexY = top ? 254 : VIEW_H - 254;
     const half = COL_W / 2 - 6;
     const isDest = destinations.has(i);
     const isHintTarget = hint !== null && hint.to === i;
     const color =
-      i % 2 === (top ? 0 : 1) ? "var(--tri-light)" : "var(--tri-dark)";
-    const pointNumber = relativePoint(HUMAN, i);
-    const white = ownCount(game.points, "white", i);
-    const black = ownCount(game.points, "black", i);
+      d % 2 === (top ? 0 : 1) ? "var(--tri-light)" : "var(--tri-dark)";
+    const pointNumber = relativePoint(humanSide, i);
+    const own = ownCount(game.points, humanSide, i);
+    const theirs = ownCount(game.points, opponentOf(humanSide), i);
     const label =
       `${lang === "es" ? "Punto" : "Point"} ${pointNumber}: ` +
-      (white > 0
-        ? `${white} ${lang === "es" ? "fichas tuyas" : "of your checkers"}`
-        : black > 0
-          ? `${black} ${lang === "es" ? "fichas de la máquina" : "machine checkers"}`
+      (own > 0
+        ? `${own} ${lang === "es" ? "fichas tuyas" : "of your checkers"}`
+        : theirs > 0
+          ? `${theirs} ${lang === "es" ? "fichas de la máquina" : "machine checkers"}`
           : lang === "es"
             ? "vacío"
             : "empty");
@@ -244,17 +263,20 @@ export function Board2D() {
     for (const player of ["white", "black"] as Player[]) {
       const count = ownCount(game.points, player, i);
       for (let k = 0; k < Math.min(count, 5); k++) {
-        const { x, y } = checkerPos(i, k);
+        const { x, y } = checkerPos(D(i), k);
         const topOfStack = k === Math.min(count, 5) - 1;
-        const isSel = selected === i && player === HUMAN && topOfStack;
+        const isSel = selected === i && player === humanSide && topOfStack;
         const isHintSrc =
-          hint !== null && hint.from === i && player === HUMAN && topOfStack;
+          hint !== null &&
+          hint.from === i &&
+          player === humanSide &&
+          topOfStack;
         const isDraggedAway =
-          drag?.from === i && player === HUMAN && topOfStack;
+          drag?.from === i && player === humanSide && topOfStack;
         checkers.push(
           <g
             key={`c-${i}-${player}-${k}`}
-            className={`checker ${player === HUMAN ? "own" : ""} ${isSel ? "selected" : ""} ${isHintSrc ? "hint-glow" : ""}`}
+            className={`checker ${player === humanSide ? "own" : ""} ${isSel ? "selected" : ""} ${isHintSrc ? "hint-glow" : ""}`}
             opacity={isDraggedAway ? 0.25 : 1}
             onPointerDown={(e) => onCheckerPointerDown(i, player, e)}
           >
@@ -281,15 +303,17 @@ export function Board2D() {
   for (const player of ["white", "black"] as Player[]) {
     const count = game.bar[player];
     for (let k = 0; k < Math.min(count, 4); k++) {
-      const { x, y } = barPos(player, k);
+      const { x, y } = barPos(dispP(player), k);
       const topOfStack = k === Math.min(count, 4) - 1;
-      const isSel = selected === "bar" && player === HUMAN && topOfStack;
+      const isSel = selected === "bar" && player === humanSide && topOfStack;
       barCheckers.push(
         <g
           key={`bar-${player}-${k}`}
-          className={`checker ${player === HUMAN ? "own" : ""} ${isSel ? "selected" : ""}`}
+          className={`checker ${player === humanSide ? "own" : ""} ${isSel ? "selected" : ""}`}
           opacity={
-            drag?.from === "bar" && player === HUMAN && topOfStack ? 0.25 : 1
+            drag?.from === "bar" && player === humanSide && topOfStack
+              ? 0.25
+              : 1
           }
           onPointerDown={(e) => onCheckerPointerDown("bar", player, e)}
         >
@@ -311,8 +335,10 @@ export function Board2D() {
     }
   }
 
-  const whiteTray = trayRect("white");
-  const blackTray = trayRect("black");
+  // The human's tray always sits bottom-right; the machine's on top.
+  const humanTray = trayRect("white");
+  const aiTray = trayRect("black");
+  const aiSide = opponentOf(humanSide);
   const offIsDest = destinations.has("off");
 
   return (
@@ -387,48 +413,64 @@ export function Board2D() {
       >
         <rect
           className="point-tri"
-          x={whiteTray.x}
-          y={whiteTray.y}
-          width={whiteTray.w}
-          height={whiteTray.h}
+          x={humanTray.x}
+          y={humanTray.y}
+          width={humanTray.w}
+          height={humanTray.h}
           rx={6}
           fill={offIsDest ? "var(--felt-light)" : "var(--wood-dark)"}
           stroke={offIsDest ? "var(--gold-bright)" : "#241610"}
           strokeWidth={offIsDest ? 2.5 : 1}
         />
-        {Array.from({ length: game.off.white }, (_, k) => (
+        {Array.from({ length: game.off[humanSide] }, (_, k) => (
           <rect
-            key={`ow-${k}`}
-            x={whiteTray.x + 8}
-            y={whiteTray.y + whiteTray.h - 16 - k * 18}
-            width={whiteTray.w - 16}
+            key={`oh-${k}`}
+            x={humanTray.x + 8}
+            y={humanTray.y + humanTray.h - 16 - k * 18}
+            width={humanTray.w - 16}
             height={13}
             rx={4}
-            fill="var(--checker-white)"
-            stroke="var(--checker-white-edge)"
+            fill={
+              humanSide === "white"
+                ? "var(--checker-white)"
+                : "var(--checker-black)"
+            }
+            stroke={
+              humanSide === "white"
+                ? "var(--checker-white-edge)"
+                : "var(--checker-black-edge)"
+            }
           />
         ))}
       </g>
       <g aria-hidden="true">
         <rect
-          x={blackTray.x}
-          y={blackTray.y}
-          width={blackTray.w}
-          height={blackTray.h}
+          x={aiTray.x}
+          y={aiTray.y}
+          width={aiTray.w}
+          height={aiTray.h}
           rx={6}
           fill="var(--wood-dark)"
           stroke="#241610"
         />
-        {Array.from({ length: game.off.black }, (_, k) => (
+        {Array.from({ length: game.off[aiSide] }, (_, k) => (
           <rect
-            key={`ob-${k}`}
-            x={blackTray.x + 8}
-            y={blackTray.y + 3 + k * 18}
-            width={blackTray.w - 16}
+            key={`oa-${k}`}
+            x={aiTray.x + 8}
+            y={aiTray.y + 3 + k * 18}
+            width={aiTray.w - 16}
             height={13}
             rx={4}
-            fill="var(--checker-black)"
-            stroke="var(--checker-black-edge)"
+            fill={
+              aiSide === "black"
+                ? "var(--checker-black)"
+                : "var(--checker-white)"
+            }
+            stroke={
+              aiSide === "black"
+                ? "var(--checker-black-edge)"
+                : "var(--checker-white-edge)"
+            }
           />
         ))}
       </g>
@@ -479,22 +521,22 @@ export function Board2D() {
       {/* Drag ghost */}
       {drag && (
         <g className="flight" opacity={0.9}>
-          <Checker x={drag.x} y={drag.y} player={HUMAN} />
+          <Checker x={drag.x} y={drag.y} player={humanSide} />
         </g>
       )}
 
-      {/* Point numbers */}
+      {/* Point numbers (in the human's own numbering) */}
       {Array.from({ length: 24 }, (_, i) => (
         <text
           key={`n-${i}`}
-          x={pointCenterX(i)}
-          y={isTopRow(i) ? 16 : VIEW_H - 6}
+          x={pointCenterX(D(i))}
+          y={isTopRow(D(i)) ? 16 : VIEW_H - 6}
           textAnchor="middle"
           fontSize={11}
           fill="var(--text-muted)"
           aria-hidden="true"
         >
-          {relativePoint(HUMAN, i)}
+          {relativePoint(humanSide, i)}
         </text>
       ))}
       <title>{aiThinking ? t(lang, "aiThinking") : ""}</title>

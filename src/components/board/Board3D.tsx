@@ -4,7 +4,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, RoundedBox } from "@react-three/drei";
 import type { Player } from "../../game/backgammon/types";
 import { ownCount } from "../../game/backgammon/moveGeneration";
-import { HUMAN, currentLegalMoves, useGame } from "../../store/gameStore";
+import { currentLegalMoves, opponentOf, useGame } from "../../store/gameStore";
 
 // ---------------------------------------------------------------------------
 // Layout: X across the board (12 columns + bar), Z along the points.
@@ -120,13 +120,18 @@ function Scene() {
   const aiThinking = useGame((s) => s.aiThinking);
   const select = useGame((s) => s.select);
   const moveChecker = useGame((s) => s.moveChecker);
+  const humanSide = useGame((s) => s.humanSide);
+  // 180° display flip when the human plays black, mirroring Board2D.
+  const flip = humanSide === "black";
+  const D = (i: number) => (flip ? 23 - i : i);
+  const dispP = (p: Player) => (flip ? opponentOf(p) : p);
 
   const legal = useMemo(() => {
     void game;
     return currentLegalMoves(useGame.getState());
   }, [game]);
   const humanCanAct =
-    game.phase === "moving" && game.turn === HUMAN && !aiThinking;
+    game.phase === "moving" && game.turn === humanSide && !aiThinking;
 
   const sources = useMemo(() => {
     const s = new Set<number | "bar">();
@@ -164,7 +169,7 @@ function Scene() {
       {Array.from({ length: 24 }, (_, i) => (
         <PointTriangle
           key={i}
-          index={i}
+          index={D(i)}
           isDestination={destinations.has(i)}
           isHint={hint !== null && (hint.to === i || hint.from === i)}
           onClick={() => onLocClick(i)}
@@ -179,11 +184,11 @@ function Scene() {
             return (
               <Checker3D
                 key={`${i}-${player}-${k}`}
-                position={checkerPos3D(i, k)}
+                position={checkerPos3D(D(i), k)}
                 player={player}
-                selected={selected === i && player === HUMAN && top}
+                selected={selected === i && player === humanSide && top}
                 selectable={
-                  humanCanAct && player === HUMAN && top && sources.has(i)
+                  humanCanAct && player === humanSide && top && sources.has(i)
                 }
                 onClick={() => onLocClick(i)}
               />
@@ -196,14 +201,16 @@ function Scene() {
         Array.from({ length: game.bar[player] }, (_, k) => (
           <Checker3D
             key={`bar-${player}-${k}`}
-            position={barPos3D(player, k)}
+            position={barPos3D(dispP(player), k)}
             player={player}
             selected={
               selected === "bar" &&
-              player === HUMAN &&
+              player === humanSide &&
               k === game.bar[player] - 1
             }
-            selectable={humanCanAct && player === HUMAN && sources.has("bar")}
+            selectable={
+              humanCanAct && player === humanSide && sources.has("bar")
+            }
             onClick={() => onLocClick("bar")}
           />
         )),
@@ -213,7 +220,7 @@ function Scene() {
         Array.from({ length: game.off[player] }, (_, k) => (
           <mesh
             key={`off-${player}-${k}`}
-            position={trayPos3D(player, k)}
+            position={trayPos3D(dispP(player), k)}
             castShadow
           >
             <cylinderGeometry

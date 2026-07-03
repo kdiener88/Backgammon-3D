@@ -5,6 +5,7 @@ import type { EngineStrength } from "../engines/BackgammonEngineAdapter";
 
 export type BoardMode = "2d" | "3d";
 export type AnimSpeed = "slow" | "normal" | "fast";
+export type PlayerColor = "white" | "black" | "random";
 
 export interface SettingsState {
   boardMode: BoardMode;
@@ -12,6 +13,8 @@ export interface SettingsState {
   soundOn: boolean;
   animSpeed: AnimSpeed;
   matchLength: number;
+  /** Color the human plays; applies when a new match starts. */
+  playerColor: PlayerColor;
   /** Fixed dice seed for reproducible games; null = crypto randomness. */
   seed: number | null;
   showHints: boolean;
@@ -34,6 +37,10 @@ function urlOverrides(): Partial<SettingsState> {
   if (mode === "2d" || mode === "3d") overrides.boardMode = mode;
   const anim = params.get("anim");
   if (anim === "fast") overrides.animSpeed = "fast";
+  const color = params.get("color");
+  if (color === "white" || color === "black" || color === "random") {
+    overrides.playerColor = color;
+  }
   return overrides;
 }
 
@@ -56,6 +63,7 @@ export const useSettings = create<SettingsState>()(
       soundOn: true,
       animSpeed: "normal",
       matchLength: 5,
+      playerColor: "white",
       seed: null,
       showHints: true,
       cubeEnabled: false,

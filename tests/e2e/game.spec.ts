@@ -97,6 +97,24 @@ test("game persists across a reload", async ({ page }) => {
   expect(moves.length).toBeGreaterThan(0);
 });
 
+test("human can play as black with a rotated board", async ({ page }) => {
+  await page.getByTestId("player-color").selectOption("black");
+  await page.getByTestId("new-match").click();
+  await ensureHumanMoving(page);
+
+  const s = await snapshot(page);
+  expect(s.humanSide).toBe("black");
+  expect(s.turn).toBe("black");
+
+  // Play a full turn as black through the real UI and get an AI reply.
+  await playAllMoves(page);
+  expect((await snapshot(page)).dice.length).toBe(0);
+  await confirmAndWaitForAi(page);
+  const after = await snapshot(page);
+  expect(after.historyLen).toBeGreaterThanOrEqual(2);
+  expect(after.turn).toBe("black");
+});
+
 test("AI keeps making only legal moves across several turns", async ({
   page,
 }) => {

@@ -17,6 +17,7 @@ Juego de backgammon completo para jugar contra la máquina, con tablero 3D premi
 
 - Reglas completas: tirada inicial, barra y entrada obligatoria, golpes, dobles, **uso máximo obligatorio de dados**, **regla del dado mayor**, bear-off (exacto/overshoot/suspensión por golpe), gammon/backgammon, partidas a 1–11 puntos, regla de Crawford y cubo de doblaje opcional.
 - IA con 3 niveles: principiante (heurística + ruido), intermedio (1-ply expectiminimax), experto (1-ply profundo, o motor externo GNUbg/wildbg vía HTTP si se configura).
+- Elegís tu color: blancas, negras o aleatorio — el tablero rota 180° para que tu home quede siempre abajo a la derecha.
 - La IA **nunca** hace movimientos ilegales: cada secuencia se re-valida contra el core de reglas antes de tocar el tablero.
 - Tablero 3D (madera/fieltro, dados con animación, cámara orbitable) y 2D SVG (click + drag, resaltado de destinos, animación de vuelo, ARIA + teclado).
 - Pista ("Hint"), análisis heurístico de posición, explicación en español de cada jugada de la IA, historial en notación estándar.

@@ -16,6 +16,7 @@ export default function App() {
   const lang = useSettings((s) => s.language);
   const started = useGame((s) => s.started);
   const matchWinner = useGame((s) => s.match.matchWinner);
+  const humanSide = useGame((s) => s.humanSide);
   const status = useGame((s) => s.status);
   const newMatch = useGame((s) => s.newMatch);
   const resumeAiIfNeeded = useGame((s) => s.resumeAiIfNeeded);
@@ -56,7 +57,9 @@ export default function App() {
                   {matchWinner
                     ? t(
                         lang,
-                        matchWinner === "white" ? "youWinMatch" : "aiWinsMatch",
+                        matchWinner === humanSide
+                          ? "youWinMatch"
+                          : "aiWinsMatch",
                       )
                     : t(lang, "appTitle")}
                 </h2>

@@ -46,8 +46,14 @@ import type {
 import { ANIM_MS, useSettings } from "./settingsStore";
 import { sounds } from "../lib/sounds";
 
-export const HUMAN: Player = "white";
-export const AI: Player = "black";
+/**
+ * Which color the human plays is decided per match (settings: white, black
+ * or random) and lives in the store as `humanSide`. Components must read it
+ * from the store instead of assuming white.
+ */
+export function opponentOf(player: Player): Player {
+  return player === "white" ? "black" : "white";
+}
 
 // ---------------------------------------------------------------------------
 // Dice roller lifecycle (not serializable → lives outside the store; the
@@ -107,6 +113,8 @@ export interface GameStore {
   analysis: EngineEvalResult | null;
   status: StatusKey;
   started: boolean;
+  /** Color the human plays this match; the AI plays the opposite. */
+  humanSide: Player;
 
   newMatch: () => void;
   nextGame: () => void;
@@ -179,11 +187,18 @@ export const useGame = create<GameStore>()(
       analysis: null,
       status: "idle",
       started: false,
+      humanSide: "white",
 
       newMatch: () => {
         const settings = useSettings.getState();
         roller = null;
         legalSeqsCache = null;
+        const humanSide: Player =
+          settings.playerColor === "random"
+            ? Math.random() < 0.5
+              ? "white"
+              : "black"
+            : settings.playerColor;
         set({
           match: initialMatchState(settings.matchLength, settings.cubeEnabled),
           turnStart: null,
@@ -197,6 +212,7 @@ export const useGame = create<GameStore>()(
           analysis: null,
           status: "idle",
           started: true,
+          humanSide,
         });
       },
 
@@ -220,7 +236,7 @@ export const useGame = create<GameStore>()(
       },
 
       rollDice: () => {
-        const { match, aiThinking, rollsUsed, gameRecord } = get();
+        const { match, aiThinking, rollsUsed, gameRecord, humanSide } = get();
         const game = match.game;
         if (aiThinking || match.matchWinner) return;
 
@@ -232,14 +248,14 @@ export const useGame = create<GameStore>()(
             match: { ...match, game: next },
             turnStart: next,
             gameRecord: { ...gameRecord, initialTurn: next.turn },
-            status: next.turn === HUMAN ? "yourTurn" : "aiTurn",
+            status: next.turn === humanSide ? "yourTurn" : "aiTurn",
             hintMoves: null,
           });
-          if (next.turn === AI) void runAiTurn(set, get);
+          if (next.turn !== humanSide) void runAiTurn(set, get);
           return;
         }
 
-        if (game.phase !== "rolling" || game.turn !== HUMAN) return;
+        if (game.phase !== "rolling" || game.turn !== humanSide) return;
         const next = rollTurn(game, dice);
         playSound("roll");
         const seqs = maximalSequences(next);
@@ -260,7 +276,11 @@ export const useGame = create<GameStore>()(
       moveChecker: (from, to) => {
         const state = get();
         const game = state.match.game;
-        if (state.aiThinking || game.phase !== "moving" || game.turn !== HUMAN)
+        if (
+          state.aiThinking ||
+          game.phase !== "moving" ||
+          game.turn !== state.humanSide
+        )
           return;
         const legal = currentLegalMoves(state);
         // With doubles both dice give the same (from, to); any match works.
@@ -284,13 +304,13 @@ export const useGame = create<GameStore>()(
       },
 
       undoMove: () => {
-        const { match, turnStart, aiThinking } = get();
+        const { match, turnStart, aiThinking, humanSide } = get();
         const game = match.game;
         if (
           aiThinking ||
           !turnStart ||
           game.phase !== "moving" ||
-          game.turn !== HUMAN ||
+          game.turn !== humanSide ||
           game.turnMoves.length === 0
         ) {
           return;
@@ -310,7 +330,11 @@ export const useGame = create<GameStore>()(
       confirmTurn: () => {
         const state = get();
         const game = state.match.game;
-        if (state.aiThinking || game.phase !== "moving" || game.turn !== HUMAN)
+        if (
+          state.aiThinking ||
+          game.phase !== "moving" ||
+          game.turn !== state.humanSide
+        )
           return;
         if (currentLegalMoves(state).length > 0) return; // dice left to play
         recordTurn(set, get);
@@ -325,10 +349,10 @@ export const useGame = create<GameStore>()(
       },
 
       resignGame: () => {
-        const { match, aiThinking } = get();
+        const { match, aiThinking, humanSide } = get();
         if (aiThinking || match.game.phase === "gameOver" || match.matchWinner)
           return;
-        const next = resign(match.game, HUMAN);
+        const next = resign(match.game, humanSide);
         set({ match: { ...match, game: next } });
         finishGame(set, get);
       },
@@ -336,8 +360,8 @@ export const useGame = create<GameStore>()(
       offerDoubleAction: async () => {
         const state = get();
         if (state.aiThinking) return;
-        if (!canOfferDouble(state.match, HUMAN)) return;
-        const offered = offerDouble(state.match.game, HUMAN);
+        if (!canOfferDouble(state.match, state.humanSide)) return;
+        const offered = offerDouble(state.match.game, state.humanSide);
         set({ match: { ...state.match, game: offered }, aiThinking: true });
         const answer = await engineClient.chooseCubeAction(
           {
@@ -369,7 +393,10 @@ export const useGame = create<GameStore>()(
       respondDouble: async (take) => {
         const state = get();
         const game = state.match.game;
-        if (game.phase !== "doubleOffered" || game.cube.offeredBy !== AI)
+        if (
+          game.phase !== "doubleOffered" ||
+          game.cube.offeredBy !== opponentOf(state.humanSide)
+        )
           return;
         if (take) {
           const taken = acceptDouble(game);
@@ -385,7 +412,11 @@ export const useGame = create<GameStore>()(
       requestHint: async () => {
         const state = get();
         const game = state.match.game;
-        if (state.aiThinking || game.phase !== "moving" || game.turn !== HUMAN)
+        if (
+          state.aiThinking ||
+          game.phase !== "moving" ||
+          game.turn !== state.humanSide
+        )
           return;
         if (game.dice.length === 0) return;
         const result = await engineClient.chooseMove(
@@ -410,12 +441,13 @@ export const useGame = create<GameStore>()(
       },
 
       resumeAiIfNeeded: () => {
-        const { match, aiThinking, started } = get();
+        const { match, aiThinking, started, humanSide } = get();
         if (!started || aiThinking || match.matchWinner) return;
         const game = match.game;
+        const aiSide = opponentOf(humanSide);
         const aiPending =
-          (game.phase === "rolling" && game.turn === AI) ||
-          (game.phase === "moving" && game.turn === AI);
+          (game.phase === "rolling" && game.turn === aiSide) ||
+          (game.phase === "moving" && game.turn === aiSide);
         if (aiPending) void runAiTurn(set, get);
       },
     }),
@@ -430,6 +462,7 @@ export const useGame = create<GameStore>()(
         lastExplanation: state.lastExplanation,
         status: state.status,
         started: state.started,
+        humanSide: state.humanSide,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
@@ -467,9 +500,9 @@ function recordTurn(set: Set, get: Get): void {
 /** Handles a game that just reached 'gameOver': scoring, match state, UI. */
 function finishGame(set: Set, get: Get): void {
   recordTurn(set, get);
-  const { match } = get();
+  const { match, humanSide } = get();
   const applied = applyGameResult(match);
-  const humanWon = applied.game.winner === HUMAN;
+  const humanWon = applied.game.winner === humanSide;
   playSound(humanWon ? "win" : "lose");
   const status: StatusKey = applied.matchWinner
     ? humanWon
@@ -497,18 +530,19 @@ async function runAiTurn(set: Set, get: Get): Promise<void> {
   if (initial.aiThinking || initial.match.matchWinner) return;
   let { match } = initial;
   let game = match.game;
-  if (game.turn !== AI) return;
+  const aiSide = opponentOf(initial.humanSide);
+  if (game.turn !== aiSide) return;
 
   set({ aiThinking: true, status: "aiTurn", selected: null, hintMoves: null });
   try {
     // 1. Cube decision (only from a fresh 'rolling' phase).
-    if (game.phase === "rolling" && canOfferDouble(match, AI)) {
+    if (game.phase === "rolling" && canOfferDouble(match, aiSide)) {
       const cube = await engineClient.chooseCubeAction(
         { state: game, match: matchContext(match), question: "offer" },
         useSettings.getState().difficulty,
       );
       if (cube?.action === "double") {
-        const offered = offerDouble(game, AI);
+        const offered = offerDouble(game, aiSide);
         set({
           match: { ...get().match, game: offered },
           aiThinking: false,
