@@ -74,7 +74,7 @@ El sitio desplegado se protege con el mismo esquema que el proyecto de ajedrez: 
 - El nivel "Experto" local es 1-ply heurístico: fuerte para jugadores casuales, lejos de GNUbg 2-ply. El adapter HTTP para motor experto real está implementado pero requiere que el usuario opere su propio servidor (razones de licencia GPL documentadas).
 - Abandonar concede automáticamente el nivel derivado de la posición (ver [docs/rules.md](docs/rules.md)); no hay negociación explícita de niveles de resignación.
 - El análisis de posición es heurístico, no análisis profesional; la UI lo indica.
-- En 3D la interacción es click-click (el drag es del modo 2D); las fichas no vuelan entre puntos en 3D (aparecen con animación de colocación).
+- En 3D las fichas no vuelan entre puntos (aparecen con animación de colocación); el drag & drop y el click-click funcionan en ambos modos.
 - Las decisiones de cubo de la IA usan umbrales cubeless simples (sin ajuste por marcador de match).
 - i18n cubre la UI (es/en); las explicaciones de jugadas de la IA están solo en español.
 

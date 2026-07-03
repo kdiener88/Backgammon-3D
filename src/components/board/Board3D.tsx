@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, RoundedBox } from "@react-three/drei";
 import type { Player } from "../../game/backgammon/types";
 import { ownCount } from "../../game/backgammon/moveGeneration";
@@ -76,7 +76,7 @@ function trayPos3D(player: Player, k: number): [number, number, number] {
 const WHITE_MAT = { color: "#e8dcc2", roughness: 0.32, metalness: 0.05 };
 const BLACK_MAT = { color: "#3a2a1e", roughness: 0.4, metalness: 0.08 };
 
-/** Premium 3D board. Interaction: click checker → click destination. */
+/** Premium 3D board: drag & drop or click checker → click destination. */
 export function Board3D() {
   return (
     <Canvas
@@ -101,16 +101,24 @@ export function Board3D() {
       />
       <pointLight position={[-7, 6, -4]} intensity={18} color="#c9a45c" />
       <Scene />
-      <OrbitControls
-        enablePan={false}
-        minPolarAngle={0.3}
-        maxPolarAngle={1.25}
-        minDistance={7}
-        maxDistance={26}
-        target={[0, 0, 0.2]}
-      />
     </Canvas>
   );
+}
+
+/** World (x, z) → board location, in DISPLAY space (caller un-flips). */
+function locationAtWorld(x: number, z: number): number | "off" | null {
+  if (x > 5.95) return "off";
+  if (Math.abs(x) < 0.62) return null; // the bar — not a droppable target
+  let col = -1;
+  for (let c = 0; c < 12; c++) {
+    if (Math.abs(colX(c) - x) <= POINT_W / 2 + 0.1) {
+      col = c;
+      break;
+    }
+  }
+  if (col === -1) return null;
+  if (Math.abs(z) < 0.15 || Math.abs(z) > 4.2) return null;
+  return z < 0 ? 12 + col : 11 - col;
 }
 
 function Scene() {
@@ -148,8 +156,31 @@ function Scene() {
 
   const hint = hintMoves && hintMoves.length > 0 ? hintMoves[0] : null;
 
+  // Drag & drop: while a checker is grabbed the camera is locked and an
+  // invisible plane above the board tracks the pointer via raycast.
+  const [drag3d, setDrag3d] = useState<{
+    from: number | "bar";
+    x: number;
+    z: number;
+  } | null>(null);
+  const justDroppedAt = useRef(0);
+
+  // Safety net: releasing the pointer outside the canvas cancels the drag.
+  useEffect(() => {
+    if (!drag3d) return;
+    const cancel = () => setDrag3d(null);
+    window.addEventListener("pointerup", cancel);
+    window.addEventListener("pointercancel", cancel);
+    return () => {
+      window.removeEventListener("pointerup", cancel);
+      window.removeEventListener("pointercancel", cancel);
+    };
+  }, [drag3d]);
+
   function onLocClick(loc: number | "bar" | "off") {
     if (!humanCanAct) return;
+    // Swallow the synthetic click that follows a drag-drop release.
+    if (performance.now() - justDroppedAt.current < 250) return;
     if (selected !== null && loc !== "bar") {
       const m = legal.find((x) => x.from === selected && x.to === loc);
       if (m) {
@@ -160,6 +191,29 @@ function Scene() {
     if (loc !== "off" && sources.has(loc))
       select(selected === loc ? null : loc);
     else select(null);
+  }
+
+  function beginDrag(loc: number | "bar", e: ThreeEvent<PointerEvent>) {
+    if (!humanCanAct || !sources.has(loc)) return;
+    e.stopPropagation();
+    select(loc);
+    setDrag3d({ from: loc, x: e.point.x, z: e.point.z });
+  }
+
+  function endDrag(x: number, z: number) {
+    const drag = drag3d;
+    setDrag3d(null);
+    if (!drag) return;
+    justDroppedAt.current = performance.now();
+    const dispLoc = locationAtWorld(x, z);
+    if (dispLoc === null) return; // snap back
+    const target = dispLoc === "off" ? "off" : D(dispLoc);
+    if (target === drag.from) return; // dropped back on its point
+    const m = legal.find((mv) => mv.from === drag.from && mv.to === target);
+    if (m) {
+      moveChecker(drag.from, target);
+    }
+    select(null);
   }
 
   return (
@@ -188,9 +242,11 @@ function Scene() {
                 player={player}
                 selected={selected === i && player === humanSide && top}
                 selectable={
-                  humanCanAct && player === humanSide && top && sources.has(i)
+                  humanCanAct && player === humanSide && sources.has(i)
                 }
+                dimmed={drag3d?.from === i && player === humanSide && top}
                 onClick={() => onLocClick(i)}
+                onDragStart={(e) => beginDrag(i, e)}
               />
             );
           });
@@ -211,9 +267,47 @@ function Scene() {
             selectable={
               humanCanAct && player === humanSide && sources.has("bar")
             }
+            dimmed={
+              drag3d?.from === "bar" &&
+              player === humanSide &&
+              k === game.bar[player] - 1
+            }
             onClick={() => onLocClick("bar")}
+            onDragStart={(e) => beginDrag("bar", e)}
           />
         )),
+      )}
+      {/* Drag & drop: tracking plane + ghost checker */}
+      {drag3d && (
+        <>
+          <mesh
+            position={[0.35, 0.5, 0]}
+            rotation={[-Math.PI / 2, 0, 0]}
+            onPointerMove={(e) => {
+              e.stopPropagation();
+              setDrag3d((d) => (d ? { ...d, x: e.point.x, z: e.point.z } : d));
+            }}
+            onPointerUp={(e) => {
+              e.stopPropagation();
+              endDrag(e.point.x, e.point.z);
+            }}
+          >
+            <planeGeometry args={[17, 11]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+          <group position={[drag3d.x, 0.55, drag3d.z]}>
+            <mesh castShadow>
+              <cylinderGeometry
+                args={[CHECKER_R * 1.05, CHECKER_R * 1.05, CHECKER_H, 32]}
+              />
+              <meshStandardMaterial
+                {...(humanSide === "white" ? WHITE_MAT : BLACK_MAT)}
+                emissive="#e8c987"
+                emissiveIntensity={0.35}
+              />
+            </mesh>
+          </group>
+        </>
       )}
       {/* Borne-off checkers */}
       {(["white", "black"] as Player[]).map((player) =>
@@ -263,6 +357,15 @@ function Scene() {
         onClick={() => onLocClick("bar")}
       />
       <Dice />
+      <OrbitControls
+        enabled={!drag3d}
+        enablePan={false}
+        minPolarAngle={0.3}
+        maxPolarAngle={1.25}
+        minDistance={7}
+        maxDistance={26}
+        target={[0, 0, 0.2]}
+      />
     </group>
   );
 }
@@ -428,13 +531,17 @@ function Checker3D({
   player,
   selected,
   selectable,
+  dimmed = false,
   onClick,
+  onDragStart,
 }: {
   position: [number, number, number];
   player: Player;
   selected: boolean;
   selectable: boolean;
+  dimmed?: boolean;
   onClick: () => void;
+  onDragStart?: (e: ThreeEvent<PointerEvent>) => void;
 }) {
   const ref = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
@@ -463,6 +570,7 @@ function Checker3D({
           e.stopPropagation();
           onClick();
         }}
+        onPointerDown={selectable ? onDragStart : undefined}
         onPointerOver={(e) => {
           if (selectable) {
             e.stopPropagation();
@@ -478,6 +586,8 @@ function Checker3D({
         <cylinderGeometry args={[CHECKER_R, CHECKER_R, CHECKER_H, 32]} />
         <meshStandardMaterial
           {...(player === "white" ? WHITE_MAT : BLACK_MAT)}
+          transparent={dimmed}
+          opacity={dimmed ? 0.3 : 1}
           emissive={
             selected ? "#e8c987" : hovered && selectable ? "#c9a45c" : "#000000"
           }
