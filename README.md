@@ -11,7 +11,7 @@ Juego de backgammon completo para jugar contra la máquina, con tablero 3D premi
 - **React Three Fiber + drei** — tablero 3D (chunk lazy, three.js solo se descarga en modo 3D)
 - **Zustand** — estado del juego y ajustes, persistidos en localStorage
 - **Web Worker** — la IA piensa fuera del main thread, con timeout, caché por posición y fallback
-- **Vitest + fast-check** (77 tests unit/property/self-play) · **Playwright** (7 E2E) · **oxlint + Prettier**
+- **Vitest + fast-check** (68 tests unit/property/self-play) · **Playwright** (7 E2E) · **oxlint + Prettier**
 
 ## Features
 
