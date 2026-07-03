@@ -60,20 +60,29 @@ export const sounds = {
     noiseBurst(60, 0.2, 90);
     noiseBurst(45, 0.15, 170);
   },
-  /** Checker click. */
+  /** Picking a checker up (selection / drag start): soft tick. */
+  pick(): void {
+    tone(1400, 30, "triangle", 0.12);
+  },
+  /**
+   * Checker landing on a point: wood-on-wood click — a bright tap plus a
+   * low thump so it reads clearly over speakers and laptop audio.
+   */
   move(): void {
-    tone(1800, 40, "triangle", 0.12);
-    tone(900, 60, "sine", 0.1, 10);
+    tone(1100, 35, "triangle", 0.22);
+    tone(190, 90, "sine", 0.26, 5);
+    noiseBurst(25, 0.12);
   },
   /** A blot gets hit. */
   hit(): void {
-    tone(200, 160, "square", 0.12);
-    tone(140, 220, "sawtooth", 0.08, 40);
+    tone(200, 160, "square", 0.16);
+    tone(140, 220, "sawtooth", 0.12, 40);
+    noiseBurst(50, 0.14, 10);
   },
   /** Bearing a checker off. */
   bearOff(): void {
-    tone(1200, 70, "triangle", 0.1);
-    tone(1600, 90, "sine", 0.08, 60);
+    tone(1200, 70, "triangle", 0.16);
+    tone(1600, 90, "sine", 0.12, 60);
   },
   /** Game or match won. */
   win(): void {

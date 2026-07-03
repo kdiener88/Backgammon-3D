@@ -270,6 +270,8 @@ export const useGame = create<GameStore>()(
       },
 
       select: (loc) => {
+        // Tactile feedback when picking a checker up (not when clearing).
+        if (loc !== null && loc !== get().selected) playSound("pick");
         set({ selected: loc });
       },
 
