@@ -12,8 +12,10 @@ import { HUMAN, currentLegalMoves, useGame } from "../../store/gameStore";
 // ---------------------------------------------------------------------------
 const POINT_W = 0.92;
 const EDGE_Z = 3.62;
-const CHECKER_R = 0.4;
-const CHECKER_H = 0.14;
+const CHECKER_R = 0.36;
+const CHECKER_H = 0.13;
+/** Row pitch: 5 checkers must fit inside a point (half-board is ~3.6). */
+const SLOT_STEP = 0.72;
 
 function columnOf(index: number): number {
   return index >= 12 ? index - 12 : 11 - index;
@@ -37,9 +39,11 @@ function checkerPos3D(
 ): [number, number, number] {
   const layer = Math.floor(stackIdx / 5);
   const slot = stackIdx % 5;
-  const dz = 0.45 + slot * (CHECKER_R * 2 + 0.02);
+  // Row pitch keeps 5 checkers inside a point; extra layers nest on top,
+  // shifted half a slot so they sit in the gaps like a real board.
+  const dz = 0.42 + slot * SLOT_STEP + (layer % 2) * (SLOT_STEP / 2);
   const z = isTop(index) ? -EDGE_Z + dz : EDGE_Z - dz;
-  return [pointX(index), 0.02 + CHECKER_H / 2 + layer * (CHECKER_H + 0.01), z];
+  return [pointX(index), 0.02 + CHECKER_H / 2 + layer * (CHECKER_H + 0.005), z];
 }
 
 function barPos3D(player: Player, stackIdx: number): [number, number, number] {
@@ -72,7 +76,7 @@ export function Board3D() {
     <Canvas
       shadows
       dpr={[1, 2]}
-      camera={{ position: [0, 12.5, 6.8], fov: 40 }}
+      camera={{ position: [0, 16, 7.2], fov: 38 }}
       style={{ width: "100%", height: "100%", minHeight: 420 }}
     >
       <color attach="background" args={["#171008"]} />
@@ -96,7 +100,7 @@ export function Board3D() {
         minPolarAngle={0.3}
         maxPolarAngle={1.25}
         minDistance={7}
-        maxDistance={20}
+        maxDistance={26}
         target={[0, 0, 0.2]}
       />
     </Canvas>
@@ -397,9 +401,11 @@ function ClickZone({
   onClick: () => void;
 }) {
   return (
-    <mesh position={[x, 0.35, z]} onClick={onClick} visible={false}>
+    // Kept visible (fully transparent) — invisible objects are skipped by
+    // the raycaster, which would break bar / bear-off clicks.
+    <mesh position={[x, 0.35, z]} onClick={onClick}>
       <boxGeometry args={[w, 0.7, d]} />
-      <meshBasicMaterial transparent opacity={0} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
     </mesh>
   );
 }
@@ -467,7 +473,7 @@ function Checker3D({
       </mesh>
       {/* Engraved ring detail */}
       <mesh
-        position={[0, CHECKER_H / 2 + 0.001, 0]}
+        position={[0, CHECKER_H / 2 + 0.006, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
       >
         <ringGeometry args={[CHECKER_R * 0.55, CHECKER_R * 0.62, 32]} />

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
+import { LoginPage } from "./components/panels/LoginPage.tsx";
 import { currentLegalMoves, useGame } from "./store/gameStore.ts";
 import { useSettings } from "./store/settingsStore.ts";
 
@@ -13,8 +14,10 @@ if (import.meta.env.DEV) {
     currentLegalMoves(useGame.getState());
 }
 
+// El middleware de Vercel redirige a /login cuando no hay sesión; la SPA
+// sirve la página de acceso en esa ruta y el juego en cualquier otra.
+const isLogin = window.location.pathname === "/login";
+
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+  <StrictMode>{isLogin ? <LoginPage /> : <App />}</StrictMode>,
 );

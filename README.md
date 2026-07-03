@@ -53,6 +53,15 @@ vercel --prod       # deploy estático en Vercel
 
 Opcional: `VITE_EXPERT_ENGINE_URL` en build-time (o Ajustes → "Motor experto (URL)" en runtime) para usar un motor externo con el contrato descrito en [docs/engine-research.md](docs/engine-research.md).
 
+## Acceso con usuario y clave
+
+El sitio desplegado se protege con el mismo esquema que el proyecto de ajedrez: variables de entorno **`BASIC_AUTH_USER`** y **`BASIC_AUTH_PASSWORD`** (más `AUTH_SECRET` opcional para firmar sesiones). Sin esas variables el sitio queda **abierto** (desarrollo local y E2E).
+
+- `middleware.ts` (Vercel Routing Middleware) redirige a `/login` sin sesión válida; también acepta `Authorization: Basic` para scripts.
+- `/api/login` valida credenciales (usuario insensible a mayúsculas/espacios, clave estricta) y deja una **cookie de sesión firmada** (HMAC-SHA256, HttpOnly, se borra al cerrar el navegador; firma con TTL de 8 h).
+- "Cerrar sesión" en Ajustes borra la cookie vía `/api/logout`.
+- Cambiar credenciales: `npx vercel env rm BASIC_AUTH_PASSWORD production preview && npx vercel env add BASIC_AUTH_PASSWORD` (ídem `BASIC_AUTH_USER`), luego redeploy.
+
 ## Documentación
 
 - [docs/architecture.md](docs/architecture.md) — capas, decisiones, flujo de turnos
